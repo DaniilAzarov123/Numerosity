@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+  <script src="src/plugins/jspsych7.3/jspsych.js"></script>
+  <link rel="stylesheet" href="src/plugins/jspsych7.3/jspsych.css">
+  
+  <script src="src/plugins/jspsych7.3/plugin-html-keyboard-response.js"></script>
+  <script src="src/plugins/jspsych7.3/plugin-html-button-response.js"></script>
+  <script src="src/plugins/jspsych7.3/plugin-canvas-button-response.js"></script>
+  <script src="src/plugins/jspsych7.3/plugin-external-html.js"></script>
+  <script src="src/plugins/plugin-numerosity-estimation.js"></script>
+  <script src="src/plugins/jspsych7.3/plugin-call-function.js"></script>
+  <script src="src/plugins/jspsych7.3/plugin-instructions.js"></script>
+  <script src="src/plugins/jspsych7.3/plugin-survey-multi-choice.js"></script>
+  <script src="src/plugins/jspsych7.3/plugin-preload.js"></script>
+
+  <style>
+      .jspsych-btn {margin-bottom: 10px;}
+  </style>
+</head>
+<body>
+</body>
+<script>
+
+
+var numPairs=8; //20.  The number of numerosities to test.  The actual number of trials will be 4 times this because there will be two adjacent and two non-adjacent pairs
+var numReps=6; //should be even number because must divide into half so that second half can repeat first half of the trials
+//so, total number of trials is numPairs*numReps*4
+var trialsPerBlock=16; //should go into total number of trials evenly - multiple of 4
+var i,j;
+var minNumerosity=50;//50
+var maxNumerosity=150; //150
+
+var jsPsych = initJsPsych({
+    show_progress_bar: true
+});
+
+var getUrlParameter = function getUrlParameter(sParam) {
+    var sPageURL = decodeURIComponent(window.location.search.substring(1)),
+        sURLVariables = sPageURL.split('&'),
+        sParameterName,
+        i;
+
+    for (i = 0; i < sURLVariables.length; i++) {
+        sParameterName = sURLVariables[i].split('=');
+
+        if (sParameterName[0] === sParam) {
+            return sParameterName[1] === undefined ? true : sParameterName[1];
+        }
+    }
+};
+
+var SONAID = getUrlParameter('id');
+var subjectID = SONAID;
+if (subjectID===undefined) {subjectID = this.jsPsych.randomization.randomID(8)}; //if ID isn't read in, best to give it a random value
+jsPsych.data.addProperties({subject_id: subjectID}); //this is the awkward way you need to call jspsych routines now!
+var check_consent = function(elem) {
+  if (document.getElementById('consent_checkbox').checked) {
+    return true;
+  }
+  else {
+    alert("If you wish to participate, you must check the box next to the statement 'I agree to participate in this study.'");
+    return false;
+  }
+  return false;
+};
+
+var consentTrial = {
+  type:jsPsychExternalHtml,
+  url: "src/consent.html",
+  cont_btn: "start",
+  check_fn: check_consent
+};
+
+class SeedableRNG { //for creating replicable random numbers
+    constructor(seed) {
+        this.seed = seed;
+    }
+
+    random() {
+        // Constants for a Linear Congruential Generator (LCG)
+        const a = 1664525;
+        const c = 1013904223;
+        const m = 2 ** 32;
+
+        // Update the seed and return a pseudo-random value between 0 and 1
+        this.seed = (a * this.seed + c) % m;
+        return this.seed / m;
+    }
+}
+
+
+function shuffleArray(array,numReps,seed) { //using seedable random number generator
+  let repeatedList = [];
+  for (let i = 0; i < numReps; i++) {
+      repeatedList = repeatedList.concat(array);
+  }
+  var rndNum = new SeedableRNG(seed); // Initialize with a seed
+    for (i = repeatedList.length - 1; i > 0; i--) {
+        const j = Math.floor(rndNum.random() * (i + 1));
+        [repeatedList[i], repeatedList[j]] = [repeatedList[j], repeatedList[i]];
+    }
+    return repeatedList;
+}
+
+
+function generateEquallySpacedValues(min, max, X) {
+    let values = [];
+    // Calculate the step size. Note: (X - 1) to divide the range into X intervals
+    let step = (max - min) / (X - 1);
+    for (let i = 0; i < X; i++) {
+        // Push the current value in the range to the array
+        values.push(Math.floor(min + step * i));
+    }
+    return values;
+}
+
+//create equally spaced numerosities and then shuffle them 3 times
+
+var numerosities=generateEquallySpacedValues(minNumerosity, maxNumerosity, numPairs);
+var equallySpacedValues1 =  shuffleArray(numerosities, numReps,800);
+var equallySpacedValues2 = shuffleArray(numerosities, numReps,801);
+var equallySpacedValues3 = shuffleArray(numerosities, numReps,802);
+var equallySpacedValues4 = shuffleArray(numerosities, numReps,803);
+
+var seedNum=1;
+var blockNum=1;
+var fullList=[];
+var thisTrial=0;
+for (i = 0; i < numPairs*(numReps/2); i += 1) { //divide by two because will fill in by hand the second half of trials
+  thisTrial=i*4;
+  blockNum= Math.floor(thisTrial/trialsPerBlock) ; //* 2 because adding two trials at a time
+  fullList[thisTrial]={matchType: 'paired', seed:seedNum,which:'first',block:blockNum,trial:thisTrial,numerosity:equallySpacedValues1[i]};
+  //add a second trial right after the first trial on this paired trial
+  thisTrial++;
+  blockNum= Math.floor(thisTrial/trialsPerBlock) ; //* 2 because adding two trials at a time
+  fullList[thisTrial]={matchType: 'paired', seed:seedNum,which:'second',block:blockNum,trial:thisTrial,numerosity:equallySpacedValues1[i]};
+  seedNum++; //only increment seed after added two exactly same trials
+
+  //add another set of paired trials in the second half of the Experiment
+  thisTrial=(i*4+numPairs*numReps*2);
+  blockNum= Math.floor(thisTrial/trialsPerBlock);
+  fullList[thisTrial]={matchType: 'paired', seed:seedNum,which:'first',block:blockNum,trial:thisTrial,numerosity:equallySpacedValues4[i]};
+  //add a second trial right after the first trial on this paired trial
+  thisTrial++;
+  blockNum= Math.floor(thisTrial/trialsPerBlock);
+  fullList[thisTrial]={matchType: 'paired', seed:seedNum,which:'second',block:blockNum,trial:thisTrial,numerosity:equallySpacedValues4[i]};
+  seedNum++; //only increment seed after added two exactly same trials
+
+  //add a set of unpaired trials, one in first block and one in second
+  thisTrial=i*4+2;
+  blockNum= Math.floor(thisTrial/trialsPerBlock);
+  fullList[thisTrial]={ matchType: 'unpaired', seed:seedNum,which:'first',block:blockNum,trial:thisTrial,numerosity:equallySpacedValues2[i] };
+  //add a second trial exactly matching first trial but in second half of experiment
+  thisTrial=i*4+2+numPairs*numReps*2;
+  blockNum= Math.floor(thisTrial/trialsPerBlock);
+  fullList[thisTrial]={ matchType: 'unpaired', seed:seedNum,which:'second',block:blockNum,trial:thisTrial,numerosity:equallySpacedValues2[i] };
+
+  //add another pair of unpaired trials with a completely different numerosity and seed adjacent, one in first and one in second block
+  seedNum++; //only increment seed after added two exactly same trials
+  thisTrial=i*4+3;
+  blockNum= Math.floor(thisTrial/trialsPerBlock);
+  fullList[thisTrial]={ matchType: 'unpaired', seed:seedNum,which:'first',block:blockNum,trial:thisTrial,numerosity:equallySpacedValues3[i] };
+  //add another trial in second half to match this one
+  thisTrial=i*4+3+numPairs*numReps*2;
+  blockNum= Math.floor(thisTrial/trialsPerBlock);
+  fullList[thisTrial]={ matchType: 'unpaired', seed:seedNum,which:'second',block:blockNum,trial:thisTrial,numerosity:equallySpacedValues3[i] };
+  seedNum++
+}
+
+var seedNum=1000;
+var blockNum=-1;
+var callibrationList=[];
+var thisTrial=0;
+for (i = 0; i < numPairs; i += 1) { //divide by two because will fill in by hand the second half of trials
+  callibrationList[i]={matchType: 'callibration', seed:+i,which:'first',block:blockNum,trial:thisTrial,numerosity:numerosities[i]};
+}
+
+  debrief_block = {
+   type: jsPsychHtmlKeyboardResponse,
+   stimulus: function() {
+     var mostRecentBlock=jsPsych.data.getLastTrialData().select('block').values[0];
+     var trials = jsPsych.data.get().filter({trial_type: 'numerosity-estimation',block: mostRecentBlock});
+     var accuracy=Math.round(trials.select('absDeviation').mean());
+     var feedback="OK";
+     if (accuracy<50)
+      {feedback="good"};
+    if (accuracy<25)
+     {feedback="VERY good"};
+   if (accuracy<15)
+    {feedback="AMAZINGLY good"};
+
+     return `<p> For the last block of trials, the average deviation of your guesses from correct answers was ${accuracy}.</p>
+     <p>The smaller the deviation the better.  Your deviation was <b> ${feedback}</b>.</p><br>
+       <p>Press any key to continue to the next block of trials</p>`;
+   }
+ };
+
+
+  var instructions1 = {
+      type: jsPsychInstructions,
+      pages: [
+      '<h1 style="text-align:center;">Welcome to the Numerosity Estimation Experiment</h1>'+
+      '<p style="text-align:left;">Your task will be to estimate the number of objects that appear on the screen ' +
+      'over several times.  The objects won\'t appear for long enough to actually count them.  Instead, we just want you '+
+      'to make the best estimate you can by moving a slider to input your guess on a numerosity scale. But, before we begin, we\'ll first show '+
+      'you a range of displays and how many objects they contain.  Looking at these displays will help you to calibrate your guesses.'
+      ],
+      button_label_next: "Look at a couple of displays with their numerosities provided",
+      show_clickable_nav: true
+  }
+
+  var instructions2 = {
+      type: jsPsychInstructions,
+      pages: [
+      '<h1 style="text-align:center;">Final Instructions</h1>'+
+      '<p style="text-align:left;">You now have a good idea about the range of numerosities that you\'ll be shown. ' +
+      'Sometimes, we will present '+
+      'the same exact display on two trials in a row.  You can give the same estimate on both trials if you want, but these repeated trials '+
+      'are also an opportunity for you to revise your estimate if you like.  Previous research has found that when people revise their estimates '+
+      'then the average of their two estimates is more accurate than the first estimate was (Vul & Pashler, 2008).  We will give you feedback '+
+      'every couple of minutes about how closely your estimations match the actual numerosity given. The whole experiment will last about 40 minutes.'
+      ],
+      button_label_next: "Begin the Experiment",
+      show_clickable_nav: true
+  }
+
+
+  var endDebriefing = {
+      type: jsPsychInstructions,
+      pages: [
+      '<h1 style="text-align:center;">Debriefing</h1>'+
+      '<p style="text-align:left;">Thank you very much for your participation.  This experiment explores an interesting phenomenon related to judgement and decision making. ' +
+      'In the Wisdom of Crowds Effect, when many people are asked to estimate something (like the weight of an ox), the average of their estimates '+
+      'is typically closer to the right answer than most, sometimes all, of the individual guesses.  Interestingly, in the Wisdom of the <b>Inner</b> Crowds Effect '+
+      'the same benefit of averaging multiple estimate is found even if the estimates come from the same person!  It is as if we were made up of multiple judges, each '+
+      'having its own opinion.  If this perspective is right, then we might expect that increasing the interval between two estimates that you make '+
+      'will tend to make their average closer to correct answer.  We are exploring this possibility in the experiment you just finished, looking to see whether '+
+      'the average of your estimates is closer to the correct answer when the gap between the estimates is increased and when the displays look different.  If we find '+
+      'that, then a possible recommendation would be that if you need to make an important and difficult judgment, you should average several judgments that you make '+
+      'about it over a long period of time.<br>'+
+      'Your data has been saved on our servers, so you are free to close this window whenever you want.  Thanks again!</p>'
+      ],
+      button_label_next: "Clear this screen",
+      show_clickable_nav: true
+  }
+
+  var metacognition = {
+  type: jsPsychSurveyMultiChoice,
+  questions: [
+    {
+      prompt: "Sometimes you saw the exact same set of objects twice and you gave two numerosity estimates. When do you think "+
+      "the <b>average of your estimates was more accurate?</b>",
+      name: 'averageEstimates',
+      options: ['When the two displays occured back-to-back, in immediate succession.',
+       'When the two displays were separated in time.'],
+      required: true
+    },
+    {
+      prompt: "When you gave two estimates to the same set of objects, when do you think you were more accurate?",
+      name: 'firstOrSecond',
+      options: ['The first time the objects were shown', 'The second time the objects were shown'],
+      required: true
+    }
+  ],
+};
+
+  function numerosityEstimation(triallist,callibration)
+  {let trialz=
+    {timeline: [{
+      type:jsPsychNumerosityEstimation ,
+      stimulus: jsPsych.timelineVariable('seed'),
+      numerosity:jsPsych.timelineVariable('numerosity'),
+      scaling:0.65,
+      callibration:callibration,
+      canvas_size: [1000, 1000],
+      button_label:callibration === "callibration" ? "Press here to see the next display":"Submit guess",
+      min:25,
+      max:175,
+      slider_start:100,
+      step:1,
+      slider_width:800,
+      stimulus_height:800,
+      stimulus_width:800,
+      require_movement:callibration === "callibration" ? false : true,
+      random_seed:jsPsych.timelineVariable('seed'),
+      prompt: callibration === "callibration" ? "" : "Estimate the number of objects<p>",
+      stimulus_duration: 5000,
+
+      data: {
+        callibration:callibration,
+        block:jsPsych.timelineVariable('block'),
+        seed:jsPsych.timelineVariable('seed'),
+        numerosity:jsPsych.timelineVariable('numerosity'),
+        matchType: jsPsych.timelineVariable('matchType'),
+        which: jsPsych.timelineVariable('which'),
+      },
+      on_finish: function(data){
+        // data.correct = (data.response == data.correct_response);
+      }
+    }],
+    timeline_variables: triallist,
+    randomize_order: false
+  }
+  return trialz};
+
+  save_server_data = {
+   type: jsPsychCallFunction,
+   func: function () {
+     var data = jsPsych.data.get().ignore("internal_node_id").json();//ommitting .filter({task: 'property'}) to include all trials
+     var xhr = new XMLHttpRequest();
+     xhr.open('POST', 'src/php/save_json.php');
+     xhr.setRequestHeader('Content-Type', 'application/json');
+     xhr.send(JSON.stringify({ filedata: data }));
+   },
+   post_trial_gap: 1000
+ }
+
+var timeline=[]
+var block;
+timeline.push(consentTrial,instructions1);//consentTrial
+timeline.push(numerosityEstimation(callibrationList,"callibration"));
+timeline.push(instructions2);
+for (i = 0; i < numPairs*numReps*4/trialsPerBlock; i += 1) { //break the full list into blocks so debriefing can go in between
+  blocks=fullList.filter(entry => entry.block === i);
+  timeline.push(numerosityEstimation(blocks,"test"),debrief_block);
+}
+timeline.push(metacognition,save_server_data,endDebriefing);
+
+jsPsych.run(timeline);
+
+
+</script>
+
+</html>

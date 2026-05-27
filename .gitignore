@@ -1,0 +1,16 @@
+# Older versions of different scripts
+OlderScriptVersions/
+
+# Paper drafts
+Paper/
+
+# OS files
+.DS_Store
+
+# R files
+.Rhistory
+.Rproj.user/
+.RData
+
+# Editor files
+.vscode/
