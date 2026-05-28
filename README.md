@@ -1,6 +1,8 @@
 # Numerosity Estimation: Wisdom of the Crowd and Wisdom of the Inner Crowd
 
-This repository contains the experiments and analyses for a project investigating the **Wisdom of the Crowd (WoC)** and **Wisdom of the Inner Crowd (WoIC)** effects in numerosity estimation. We examine how aggregating multiple estimates — either across individuals or within a single individual — improves judgment accuracy, and what factors modulate this benefit.
+This repository contains the experiments and analyses for a project investigating the **Wisdom of the Crowd (WoC)** and **Wisdom of the Inner Crowd (WoIC)** effects in numerosity estimation. We examine how aggregating multiple estimates (either across individuals or within a single individual) improves judgment accuracy, and what factors modulate this benefit.
+
+***Authors:*** Daniil Azarov, Adam N. Sanborn, Nick Chater, Robert L. Goldstone.
 
 ## Project Structure
 
