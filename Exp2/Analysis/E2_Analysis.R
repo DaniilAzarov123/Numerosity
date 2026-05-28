@@ -10,7 +10,7 @@
 #   4.  WoIC magnitude × numerosity (quadratic)
 #   5.  Wisdom of the Crowd (WoC)
 #   6.  Direction of the second estimate
-#   7.  Within- vs cross-seed similarity
+#   7.  Within- vs cross-seed similarity and WoIC effect
 #   8.  Metacognition
 # =============================================================================
 
@@ -36,7 +36,7 @@ appearance_labels <- c(
 )
 
 appearance_colors <- c(
-  "samePos_sameObj" = "green",
+  "samePos_sameObj" = "darkgreen",
   "samePos_diffObj" = "orange",
   "diffPos_sameObj" = "red",
   "diffPos_diffObj" = "blue"
@@ -245,7 +245,8 @@ contrast(
 # Plot
 p3 <- ggplot(df_long_log,
        aes(x = estimate_type, y = abs_error_log,
-           group = appearance, color = appearance)) +
+           color = appearance,
+           group = appearance)) +
   stat_summary(fun = mean, geom = "point", size = 8,
                position = position_dodge(0.4)) +
   stat_summary(fun.data = mean_cl_normal, geom = "errorbar",
@@ -549,7 +550,7 @@ p6
 # ggsave("plots/dir_second_est.png", plot = p6,
 #        width = 14, height = 8, dpi = 600)
 
-# ── 7. Within- vs cross-seed similarity ─────────────────────────
+# ── 7.1. Within- vs cross-seed similarity ─────────────────────────
 #
 # Within each appearance condition, do participants give more similar estimates
 # to the exact same trial (same seed) vs a different trial with the same mean
@@ -559,16 +560,16 @@ p6
 # For each row, a cross-seed partner is sampled from a different seed but the
 # same subject and same mean numerosity (within the same appearance condition).
 
-gm_raw_similarity <- gm_raw %>%
+gm_raw_dissimilarity <- gm_raw %>%
   select(subject_id, seed, mean_numerosity, appearance,
          first_estimate_raw, second_estimate_raw) %>%
-  mutate(within_similarity = abs(first_estimate_raw - second_estimate_raw))
+  mutate(within_dissimilarity = abs(first_estimate_raw - second_estimate_raw))
 
 
 # Sample a cross-seed partner for each row within subject × appearance
 set.seed(1234)
 
-gm_raw_similarity <- gm_raw_similarity %>%
+gm_raw_dissimilarity <- gm_raw_dissimilarity %>%
   group_by(subject_id, appearance) %>%
   group_modify(~ {
     df <- .x
@@ -583,26 +584,26 @@ gm_raw_similarity <- gm_raw_similarity %>%
         cross_partner[i] <- df$second_estimate_raw[j]
       }
     }
-    df$cross_similarity <- abs(df$first_estimate_raw - cross_partner)
+    df$cross_dissimilarity <- abs(df$first_estimate_raw - cross_partner)
     df
   }) %>%
   ungroup()
 
-df_long_similarity <- gm_raw_similarity %>%
+df_long_dissimilarity <- gm_raw_dissimilarity %>%
   select(subject_id, appearance, mean_numerosity,
-         within_similarity, cross_similarity) %>%
+         within_dissimilarity, cross_dissimilarity) %>%
   pivot_longer(
-    cols = c(within_similarity, cross_similarity),
+    cols = c(within_dissimilarity, cross_dissimilarity),
     names_to = "display_type",
-    values_to = "similarity"
+    values_to = "dissimilarity"
   ) %>%
   mutate(display_type = factor(display_type,
-                               levels = c("within_similarity", "cross_similarity")))
+                               levels = c("within_dissimilarity", "cross_dissimilarity")))
 
 model_similarity_seed <- lmer(
-  similarity ~ appearance * display_type + 
+  dissimilarity ~ appearance * display_type + 
     (1 | mean_numerosity) + (1 | subject_id),
-  data = df_long_similarity
+  data = df_long_dissimilarity
 )
 
 summary(model_similarity_seed)
@@ -611,39 +612,177 @@ ranova(model_similarity_seed)
 performance(model_similarity_seed)
 effectsize::eta_squared(model_similarity_seed)
 
+# Post-hoc contrasts
+contrast(
+  emmeans(model_similarity_seed, ~ display_type * appearance),
+  method = list(
+    "Same vs Diff trial (avg over appearance)" = c(0.25, -0.25, 0.25, -0.25,
+                                                   0.25, -0.25, 0.25, -0.25),
+    "Same vs Diff trial: samePos_sameObj" = c(1, -1, 0, 0, 0, 0, 0, 0),
+    "Same vs Diff trial: samePos_diffObj" = c(0, 0, 1, -1, 0, 0, 0, 0),
+    "Same vs Diff trial: diffPos_sameObj" = c(0, 0, 0, 0, 1, -1, 0, 0),
+    "Same vs Diff trial: diffPos_diffObj" = c(0, 0, 0, 0, 0, 0, 1, -1)
+  ),
+  adjust = "bonferroni"
+) %>%
+  as.data.frame() %>%
+  mutate(
+    sig = case_when(p.value < .001 ~ "***",
+                    p.value < .01 ~ "**",
+                    p.value < .05 ~ "*",
+                    TRUE ~ ""),
+    cohen_d = sqrt(1 / n_subj) * estimate / SE
+  )
+
 # Plot
-p7 <- ggplot(df_long_similarity,
-       aes(x = mean_numerosity, y = similarity,
-           color = display_type, group = display_type)) +
-  stat_summary(fun = mean, geom = "point", size = 5, alpha = 0.8,
+p7_1 <- ggplot(df_long_dissimilarity,
+               aes(x = mean_numerosity, y = dissimilarity,
+                   color = appearance, alpha = display_type,
+                   group = interaction(appearance, display_type))) +
+  stat_summary(fun = mean, geom = "point", size = 5,
                position = position_dodge(3)) +
-  stat_summary(fun = mean, geom = "line", linewidth = 1, alpha = 0.8,
+  stat_summary(fun = mean, geom = "line", linewidth = 1,
                position = position_dodge(3)) +
-  stat_summary(fun.data = mean_cl_normal, geom = "errorbar", 
-               linewidth = 2, alpha = 0.8,
+  stat_summary(fun.data = mean_cl_normal, geom = "errorbar",
+               linewidth = 2,
                position = position_dodge(3)) +
   facet_wrap(~ appearance, nrow = 2,
              labeller = labeller(appearance = appearance_labels)) +
-  scale_color_manual(breaks = c("within_similarity", "cross_similarity"),
-                     labels = c("Same Display", "Different Display"),
-                     values = c("pink", "brown"),
-                     name   = "Display") +
+  scale_color_manual(values = appearance_colors,
+                     guide  = "none") +
+  scale_alpha_manual(values = c("within_dissimilarity" = 1, "cross_dissimilarity" = 0.4),
+                     breaks = c("within_dissimilarity", "cross_dissimilarity"),
+                     labels = c("Same Trial", "Different Trial")) +
   labs(x = "Mean Numerosity",
-       y = expression("|Estimate"[1] ~ "-" ~ "Estimate"[2] ~ "|")) +
+       y = expression("|Estimate"[1] ~ "-" ~ "Estimate"[2] ~ "|"),
+       alpha = NULL) +
   theme_minimal() +
   theme(axis.text = element_text(size = 35, color = "black"),
         axis.title = element_text(size = 35, color = "black"),
         legend.text = element_text(size = 25, color = "black"),
         legend.title = element_blank(),
-        legend.position = 'top',
+        legend.position = "top",
         axis.line = element_line(linewidth = 1, color = "black"),
-        strip.text = element_text(size = 25, color = "black"))+
-  guides(color = guide_legend(ncol = 2))
-p7
+        strip.text = element_text(size = 25, color = "black")) +
+  guides(alpha = guide_legend(ncol = 2))
+p7_1
 
 # Save plot if needed
-# ggsave("plots/similarity_seed.png", plot = p7,
+# ggsave("plots/similarity_seed.png", plot = p7_1,
 #        width = 18, height = 12, dpi = 600)
+
+# ── 7.2. Within- vs cross-seed WoIC effect ─────────────────────────
+#
+# We know that estimates for different seeds are less similar than
+# estimates for the same seed - is there an advantage in WoIC effect, too?
+
+# Different seed pairs
+set.seed(1234)
+gm_log_woic_across_seed <- gm_log %>%
+  group_by(subject_id, appearance) %>%
+  group_modify(~ {
+    df <- .x
+    cross_seed_partner <- numeric(nrow(df))
+    for (i in seq_len(nrow(df))) {
+      candidates <- which(df$log_mean_numerosity == df$log_mean_numerosity[i] &
+                            df$seed != df$seed[i])
+      if (length(candidates) == 0) {
+        cross_seed_partner[i] <- NA_real_
+      } else {
+        j <- sample(candidates, 1)
+        cross_seed_partner[i] <- j
+      }
+    }
+    df$cross_seed_first_estimate_log <- df$first_estimate_log[cross_seed_partner]
+    df
+  }) %>%
+  ungroup() %>% 
+  mutate(
+    cross_seed_first_error_log = abs(cross_seed_first_estimate_log - log_mean_numerosity),
+    cross_seed_geom_mean_log = exp(
+      rowMeans(
+        cbind(log(first_estimate_log),log(cross_seed_first_estimate_log))
+        )),
+    cross_seed_geom_mean_error_log = abs(cross_seed_geom_mean_log - log_mean_numerosity)
+  )
+
+
+df_long_errors <- gm_log_woic_across_seed %>%
+  select(subject_id, seed, log_mean_numerosity, appearance,
+         geom_mean_error_log, cross_seed_geom_mean_error_log) %>%
+  pivot_longer(
+    cols = c(geom_mean_error_log, cross_seed_geom_mean_error_log),
+    names_to = "condition",
+    values_to = "abs_error_log"
+  ) %>%
+  mutate(
+    display_type = factor(if_else(str_detect(condition, "cross"),
+                                  "Different Trials", "Same Trials"),
+                          levels = c("Same Trials", "Different Trials"))
+  )
+
+model_errors_seed <- lmer(
+  abs_error_log ~ appearance * display_type + (1 | subject_id),
+  data = df_long_errors
+)
+
+summary(model_errors_seed)
+car::Anova(model_errors_seed, type = 2)
+ranova(model_errors_seed)
+performance(model_errors_seed)
+effectsize::eta_squared(model_errors_seed)
+
+# Post-hoc comparisons
+contrast(
+  emmeans(model_errors_seed, ~ display_type * appearance),
+  method = list(
+    "Same vs Diff trial (avg over appearance)" = c(0.25, -0.25, 0.25, -0.25,
+                                                   0.25, -0.25, 0.25, -0.25),
+    "Same vs Diff trial: samePos_sameObj" = c(1, -1, 0, 0, 0, 0, 0, 0),
+    "Same vs Diff trial: samePos_diffObj" = c(0, 0, 1, -1, 0, 0, 0, 0),
+    "Same vs Diff trial: diffPos_sameObj" = c(0, 0, 0, 0, 1, -1, 0, 0),
+    "Same vs Diff trial: diffPos_diffObj" = c(0, 0, 0, 0, 0, 0, 1, -1)
+  ),
+  adjust = "bonferroni"
+) %>%
+  as.data.frame() %>%
+  mutate(
+    sig = case_when(p.value < .001 ~ "***",
+                    p.value < .01 ~ "**",
+                    p.value < .05 ~ "*",
+                    TRUE ~ ""),
+    cohen_d = sqrt(1 / n_subj) * estimate / SE
+  )
+
+
+# Plot
+p7_2 <- ggplot(df_long_errors,
+       aes(x = display_type, y = abs_error_log,
+           color = appearance)) +
+  stat_summary(fun = mean, geom = "point", size = 8,
+               position = position_dodge(0.6)) +
+  stat_summary(fun.data = mean_cl_normal, geom = "errorbar",
+               linewidth = 2, width = 0.2,
+               position = position_dodge(0.6)) +
+  scale_color_manual(values = appearance_colors,
+                     labels = appearance_labels) +
+  scale_x_discrete(limits = c("Different Trials", "Same Trials")) +
+  labs(x = NULL,
+       y = "Geometric Mean Error (log)") +
+  theme_minimal() +
+  theme(axis.text    = element_text(size = 35, color = "black"),
+        axis.title   = element_text(size = 35, color = "black"),
+        legend.text  = element_text(size = 20, color = "black"),
+        legend.title = element_blank(),
+        legend.position = "top",
+        axis.line    = element_line(linewidth = 1, color = "black")) +
+  guides(color = guide_legend(ncol = 2))
+
+p7_2
+
+# Save plot if needed
+# ggsave("plots/woic_seed.png", plot = p7_2,
+#        width = 14, height = 8, dpi = 600)
 
 # ── 8. Metacognition ──────────────────────────────────────────────────────────
 #

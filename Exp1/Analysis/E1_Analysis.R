@@ -651,8 +651,8 @@ df_fatigue <- gm_log %>%
   mutate(which_half = factor(if_else(seed <= 47, "First", "Second"),
                              levels = c("First", "Second"))) %>%
   pivot_longer(
-    cols      = c(first_error_log, second_error_log, geom_mean_error_log),
-    names_to  = "estimate_type",
+    cols = c(first_error_log, second_error_log, geom_mean_error_log),
+    names_to = "estimate_type",
     values_to = "abs_error_log"
   ) %>%
   mutate(estimate_type = factor(estimate_type,
@@ -668,32 +668,32 @@ summary(model_fatigue)
 
 # Plot
 p8 <- ggplot(df_fatigue,
-       aes(x = estimate_type, y = abs_error_log,
-           group = which_half, color = which_half)) +
+             aes(x = estimate_type, y = abs_error_log,
+                 group = which_half, alpha = which_half)) +
   stat_summary(fun = mean, geom = "point", size = 8,
-               position = position_dodge(0.4)) +
+               position = position_dodge(0.4), color = "red") +
   stat_summary(fun.data = mean_cl_normal, geom = "errorbar",
                linewidth = 2, width = 0.35,
-               position = position_dodge(0.4)) +
+               position = position_dodge(0.4), color = "red") +
   stat_summary(fun = mean, geom = "line", linewidth = 1,
-               position = position_dodge(0.4)) +
+               position = position_dodge(0.4), color = "red") +
   scale_x_discrete(
     breaks = c("geom_mean_error_log", "first_error_log", "second_error_log"),
     labels = c("Geometric Mean",
                expression(1^st ~ Estimate),
                expression(2^nd ~ Estimate))
   ) +
-  scale_color_manual(values = c("orange", "purple"),
+  scale_alpha_manual(values = c("First" = 1, "Second" = 0.4),
                      labels = c("First", "Second")) +
-  labs(y = "Absolute Error (log)", color = "Experiment Half") +
+  labs(y = "Absolute Error (log)", alpha = "Experiment Half") +
   theme_minimal() +
-  theme(axis.text    = element_text(size = 35, color = "black"),
-        axis.title   = element_text(size = 35, color = "black"),
-        legend.text  = element_text(size = 25, color = "black"),
+  theme(axis.text = element_text(size = 35, color = "black"),
+        axis.title = element_text(size = 35, color = "black"),
+        legend.text = element_text(size = 25, color = "black"),
         legend.title = element_text(size = 35, color = "black"),
-        legend.position = 'top',
+        legend.position = "top",
         axis.title.x = element_blank(),
-        axis.line    = element_line(linewidth = 1, color = "black"))
+        axis.line = element_line(linewidth = 1, color = "black"))
 p8
 
 # Save plot if needed
