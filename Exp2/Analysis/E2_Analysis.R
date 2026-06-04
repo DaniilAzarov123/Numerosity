@@ -163,7 +163,7 @@ p2 <- ggplot(gm_raw,
                      labels = appearance_labels) +
   scale_x_continuous(limits = c(40, 160), breaks = seq(50, 150, 25)) +
   guides(color = guide_legend(override.aes = list(size = 10))) +
-  labs(x = "Mean Numerosity",
+  labs(x = "Mean Numerosity (raw)",
        y = expression("|Estimate"[1] ~ "-" ~ "Estimate"[2] ~ "|")) +
   theme_minimal() +
   theme(axis.text = element_text(size = 35, color = "black"),
