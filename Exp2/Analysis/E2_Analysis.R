@@ -10,8 +10,9 @@
 #   4.  WoIC magnitude × numerosity (quadratic)
 #   5.  Wisdom of the Crowd (WoC)
 #   6.  Direction of the second estimate
-#   7.  Within- vs cross-seed similarity and WoIC effect
+#   7.  Within- vs cross-seed WoIC effect
 #   8.  Metacognition
+#   9.  Supplementary: Within- vs cross-seed similarity
 # =============================================================================
 
 library(dplyr)
@@ -38,8 +39,8 @@ appearance_labels <- c(
 appearance_colors <- c(
   "samePos_sameObj" = "darkgreen",
   "samePos_diffObj" = "orange",
-  "diffPos_sameObj" = "red",
-  "diffPos_diffObj" = "blue"
+  "diffPos_sameObj" = "#7B2D8B",
+  "diffPos_diffObj" = "#8C564B"
 )
 
 appearance_levels <- c("samePos_sameObj", "samePos_diffObj",
@@ -91,14 +92,16 @@ effectsize::eta_squared(model_regression)
 
 # Plot
 p1 <- ggplot(trials, aes(x = log_mean_numerosity, y = log_response)) +
-  geom_smooth(se = FALSE, method = "glm", linewidth = 2, linetype = "dashed") +
+  geom_smooth(se = FALSE, method = "glm", 
+              linewidth = 2, linetype = "dashed", 
+              color = 'black', alpha = 0.7) +
   stat_summary(fun = mean, geom = "point", size = 5) +
   stat_summary(fun.data = mean_cl_normal, geom = "errorbar",
                linewidth = 2, width = 0.02) +
   geom_abline(slope = 1, intercept = 0, linewidth = 2,
-              linetype = "dashed", color = "red") +
+              linetype = "dashed", color = "gray") +
   annotate("text", x = 4.8, y = 4.8, label = "y = x",
-           color = "red", angle = 40, hjust = 0, vjust = -0.5, size = 7) +
+           color = "black", angle = 40, hjust = 0, vjust = -0.5, size = 7) +
   scale_x_continuous(breaks = seq(3.9, 5.1, 0.2)) +
   scale_y_continuous(breaks = seq(3.9, 5.1, 0.2)) +
   labs(x = "Mean Numerosity (log)", y = "Estimate (log)") +
@@ -432,7 +435,7 @@ p5 <- ggplot(df_long_woc,
 p5
 
 # Save plot if needed
-# ggsave("plots/woc_display.png", plot = p5,
+# ggsave("plots/woc.png", plot = p5,
 #        width = 16, height = 8, dpi = 600)
 
 # ── 6. Direction of the second estimate ───────────────────────────
@@ -550,131 +553,11 @@ p6
 # ggsave("plots/dir_second_est.png", plot = p6,
 #        width = 14, height = 8, dpi = 600)
 
-# ── 7.1. Within- vs cross-seed similarity ─────────────────────────
+# ── 7. Within- vs cross-seed WoIC effect ─────────────────────────
 #
-# Within each appearance condition, do participants give more similar estimates
-# to the exact same trial (same seed) vs a different trial with the same mean
-# numerosity (different seed)? If display variability within a trial drives
-# within-person sampling, same-seed estimates should be more similar.
-#
-# For each row, a cross-seed partner is sampled from a different seed but the
-# same subject and same mean numerosity (within the same appearance condition).
-
-gm_raw_dissimilarity <- gm_raw %>%
-  select(subject_id, seed, mean_numerosity, appearance,
-         first_estimate_raw, second_estimate_raw) %>%
-  mutate(within_dissimilarity = abs(first_estimate_raw - second_estimate_raw))
-
-
-# Sample a cross-seed partner for each row within subject × appearance
-set.seed(1234)
-
-gm_raw_dissimilarity <- gm_raw_dissimilarity %>%
-  group_by(subject_id, appearance) %>%
-  group_modify(~ {
-    df <- .x
-    cross_partner <- numeric(nrow(df))
-    for (i in seq_len(nrow(df))) {
-      candidates <- which(df$mean_numerosity == df$mean_numerosity[i] &
-                            df$seed != df$seed[i])
-      if (length(candidates) == 0) {
-        cross_partner[i] <- NA_real_
-      } else {
-        j <- sample(candidates, 1)
-        cross_partner[i] <- df$second_estimate_raw[j]
-      }
-    }
-    df$cross_dissimilarity <- abs(df$first_estimate_raw - cross_partner)
-    df
-  }) %>%
-  ungroup()
-
-df_long_dissimilarity <- gm_raw_dissimilarity %>%
-  select(subject_id, appearance, mean_numerosity,
-         within_dissimilarity, cross_dissimilarity) %>%
-  pivot_longer(
-    cols = c(within_dissimilarity, cross_dissimilarity),
-    names_to = "display_type",
-    values_to = "dissimilarity"
-  ) %>%
-  mutate(display_type = factor(display_type,
-                               levels = c("within_dissimilarity", "cross_dissimilarity")))
-
-model_similarity_seed <- lmer(
-  dissimilarity ~ appearance * display_type + 
-    (1 | mean_numerosity) + (1 | subject_id),
-  data = df_long_dissimilarity
-)
-
-summary(model_similarity_seed)
-car::Anova(model_similarity_seed, type = 2)
-ranova(model_similarity_seed)
-performance(model_similarity_seed)
-effectsize::eta_squared(model_similarity_seed)
-
-# Post-hoc contrasts
-contrast(
-  emmeans(model_similarity_seed, ~ display_type * appearance),
-  method = list(
-    "Same vs Diff trial (avg over appearance)" = c(0.25, -0.25, 0.25, -0.25,
-                                                   0.25, -0.25, 0.25, -0.25),
-    "Same vs Diff trial: samePos_sameObj" = c(1, -1, 0, 0, 0, 0, 0, 0),
-    "Same vs Diff trial: samePos_diffObj" = c(0, 0, 1, -1, 0, 0, 0, 0),
-    "Same vs Diff trial: diffPos_sameObj" = c(0, 0, 0, 0, 1, -1, 0, 0),
-    "Same vs Diff trial: diffPos_diffObj" = c(0, 0, 0, 0, 0, 0, 1, -1)
-  ),
-  adjust = "bonferroni"
-) %>%
-  as.data.frame() %>%
-  mutate(
-    sig = case_when(p.value < .001 ~ "***",
-                    p.value < .01 ~ "**",
-                    p.value < .05 ~ "*",
-                    TRUE ~ ""),
-    cohen_d = sqrt(1 / n_subj) * estimate / SE
-  )
-
-# Plot
-p7_1 <- ggplot(df_long_dissimilarity,
-               aes(x = mean_numerosity, y = dissimilarity,
-                   color = appearance, alpha = display_type,
-                   group = interaction(appearance, display_type))) +
-  stat_summary(fun = mean, geom = "point", size = 5,
-               position = position_dodge(3)) +
-  stat_summary(fun = mean, geom = "line", linewidth = 1,
-               position = position_dodge(3)) +
-  stat_summary(fun.data = mean_cl_normal, geom = "errorbar",
-               linewidth = 2,
-               position = position_dodge(3)) +
-  facet_wrap(~ appearance, nrow = 2,
-             labeller = labeller(appearance = appearance_labels)) +
-  scale_color_manual(values = appearance_colors,
-                     guide  = "none") +
-  scale_alpha_manual(values = c("within_dissimilarity" = 1, "cross_dissimilarity" = 0.4),
-                     breaks = c("within_dissimilarity", "cross_dissimilarity"),
-                     labels = c("Same Trial", "Different Trial")) +
-  labs(x = "Mean Numerosity",
-       y = expression("|Estimate"[1] ~ "-" ~ "Estimate"[2] ~ "|"),
-       alpha = NULL) +
-  theme_minimal() +
-  theme(axis.text = element_text(size = 35, color = "black"),
-        axis.title = element_text(size = 35, color = "black"),
-        legend.text = element_text(size = 25, color = "black"),
-        legend.title = element_blank(),
-        legend.position = "top",
-        axis.line = element_line(linewidth = 1, color = "black"),
-        strip.text = element_text(size = 25, color = "black")) +
-  guides(alpha = guide_legend(ncol = 2))
-p7_1
-
-# Save plot if needed
-# ggsave("plots/similarity_seed.png", plot = p7_1,
-#        width = 18, height = 12, dpi = 600)
-
-# ── 7.2. Within- vs cross-seed WoIC effect ─────────────────────────
-#
-# We know that estimates for different seeds are less similar than
-# estimates for the same seed - is there an advantage in WoIC effect, too?
+# Is there a larger WoIC effect when estimates come from different
+# trials (seeds)? We know that it's true for Exp 1.
+# 
 
 # Different seed pairs
 set.seed(1234)
@@ -756,7 +639,7 @@ contrast(
 
 
 # Plot
-p7_2 <- ggplot(df_long_errors,
+p7 <- ggplot(df_long_errors,
        aes(x = display_type, y = abs_error_log,
            color = appearance)) +
   stat_summary(fun = mean, geom = "point", size = 8,
@@ -778,10 +661,10 @@ p7_2 <- ggplot(df_long_errors,
         axis.line    = element_line(linewidth = 1, color = "black")) +
   guides(color = guide_legend(ncol = 2))
 
-p7_2
+p7
 
 # Save plot if needed
-# ggsave("plots/woic_seed.png", plot = p7_2,
+# ggsave("plots/woic_seed.png", plot = p7,
 #        width = 14, height = 8, dpi = 600)
 
 # ── 8. Metacognition ──────────────────────────────────────────────────────────
@@ -809,22 +692,25 @@ chisq.test(table(metacognition_df$Q3_resp))
 with(metacognition_df, table(Q2_resp, Q3_resp))
 
 # Plot Q1
-p8 <- ggplot(metacognition_df, aes(x = Q1_resp)) +
-  geom_bar(fill = "blue", alpha = 0.8) +
+p8_1 <- ggplot(metacognition_df, aes(x = Q1_resp, 
+                             y = after_stat(count / sum(count))
+                             )) +
+  geom_bar(fill = "gray", alpha = 0.8) +
   scale_x_discrete(breaks = c("Average", "First_half", "Second_half"),
                    labels = c("Average",
                               expression(1^st ~ Half),
                               expression(2^nd ~ Half))) +
-  labs(y = "Number of Participants") +
+  scale_y_continuous(limits = c(0,1))+
+  labs(y = "Proportion of Participants") +
   theme_minimal() +
-  theme(axis.text = element_text(size = 35, color = "black"),
-        axis.title = element_text(size = 35, color = "black"),
+  theme(axis.text   = element_text(size = 35, color = "black"),
+        axis.title  = element_text(size = 35, color = "black"),
         axis.title.x = element_blank(),
-        axis.line = element_line(linewidth = 1, color = "black"))
-p8
+        axis.line   = element_line(linewidth = 1, color = "black"))
+p8_1
 
 # Save plot if needed
-# ggsave("plots/q1.png", plot = p8,
+# ggsave("plots/q1.png", plot = p8_1,
 #        width = 12, height = 8, dpi = 600)
 
 # Plot Q2 and Q3 together
@@ -837,24 +723,175 @@ q2_q3_df_long_summary <- metacognition_df %>%
                                       "crackers", "rocks", "fruits",
                                       "letters", "animalCrackers", "None")))
 
-p9 <- ggplot(q2_q3_df_long_summary, aes(Response, fill = Question)) +
-  geom_bar(position = position_dodge(), alpha = 0.8) +
-  scale_fill_manual(breaks = c("Q2_resp", "Q3_resp"),
-                    labels = c("Most difficult to estimate?",
-                               "Easiest to estimate?"),
-                    values = c("red", "blue")) +
-  labs(x = "Category", y = "Number of Participants") +
+# Feel free to uncomment and see the plot
+# p8_2 <- ggplot(q2_q3_df_long_summary, aes(Response, fill = Question)) +
+#   geom_bar(position = position_dodge(), alpha = 0.8) +
+#   scale_fill_manual(breaks = c("Q2_resp", "Q3_resp"),
+#                     labels = c("Most difficult to estimate?",
+#                                "Easiest to estimate?"),
+#                     values = c("red", "blue")) +
+#   labs(x = "Category", y = "Number of Participants") +
+#   theme_minimal() +
+#   theme(axis.text = element_text(size = 35, color = "black"),
+#         axis.title = element_text(size = 35, color = "black"),
+#         axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1),
+#         axis.title.x = element_blank(),
+#         legend.position = c(0.25, 0.8),
+#         legend.title = element_blank(),
+#         legend.text = element_text(size = 35, color = "black"),
+#         axis.line = element_line(linewidth = 1, color = "black"))
+# p8_2
+
+# Save plot if needed
+# ggsave("plots/q2_q3.png", plot = p8_2,
+#        width = 14, height = 8, dpi = 600)
+
+
+# ── 9. SUPPLEMENTARY: Permutation test (similarity of individual estimates) ───
+#
+# What sources of shared structure drive similarity between Est1 and
+# Est2? To answer this, we compute Spearman correlations between Est1 and a
+# permuted Est2 under different constraints.
+#
+N_rep <- 10^4
+
+gm_raw_permut <- gm_raw
+
+# == Within-participants permutations ==========
+# Est2 is always drawn from the SAME participant.
+
+permutation_rho_within <- function(data, extra_var = NULL) {
+  if (is.null(extra_var)) {
+    data$group_key <- as.character(data$subject_id)
+  } else {
+    data$group_key <- paste(data$subject_id, data[[extra_var]], sep = "_")
+  }
+  groups <- split(data, data$group_key)
+  replicate(N_rep, {
+    est1 <- c()
+    est2 <- c()
+    for (g in groups) {
+      perm <- sample(nrow(g))
+      est1 <- c(est1, g$first_estimate_raw)
+      est2 <- c(est2, g$second_estimate_raw[perm])
+    }
+    cor(est1, est2, method = "spearman")
+  })
+}
+
+# == Across-participants permutations ==========
+# Est2 is always drawn from a DIFFERENT participant.
+
+permutation_rho_across <- function(data, group_var = NULL) {
+  if (is.null(group_var)) {
+    subjects <- unique(data$subject_id)
+    replicate(N_rep, {
+      est2_new <- numeric(nrow(data))
+      for (id in subjects) {
+        idx  <- which(data$subject_id == id)
+        pool <- data$first_estimate_raw[data$subject_id != id]
+        est2_new[idx] <- sample(pool, length(idx), replace = TRUE)
+      }
+      cor(data$first_estimate_raw, est2_new, method = "spearman")
+    })
+  } else {
+    data$group_key <- as.character(data[[group_var]])
+    groups <- split(data, data$group_key)
+    replicate(N_rep, {
+      est1_all <- c()
+      est2_all <- c()
+      for (g in groups) {
+        subjects_in_group <- unique(g$subject_id)
+        est2_new <- numeric(nrow(g))
+        for (id in subjects_in_group) {
+          idx  <- which(g$subject_id == id)
+          pool <- g$first_estimate_raw[g$subject_id != id]
+          if (length(pool) == 0) pool <- g$first_estimate_raw
+          est2_new[idx] <- sample(pool, length(idx), replace = TRUE)
+        }
+        est1_all <- c(est1_all, g$first_estimate_raw)
+        est2_all <- c(est2_all, est2_new)
+      }
+      cor(est1_all, est2_all, method = "spearman")
+    })
+  }
+}
+
+# == Run permutations ==========
+set.seed(100)
+
+# Within participants
+rho_within_random <- permutation_rho_within(gm_raw_permut)
+rho_within_numerosity <- permutation_rho_within(gm_raw_permut, "mean_numerosity")
+
+# Across participants
+rho_across_random <- permutation_rho_across(gm_raw_permut)
+rho_across_numerosity <- permutation_rho_across(gm_raw_permut, "mean_numerosity")
+rho_across_display <- permutation_rho_across(gm_raw_permut, "seed")
+
+# Exact within-person same-display correlation (single point — shown as vertical line)
+rho_exact <- cor(gm_raw_permut$first_estimate_raw,
+                    gm_raw_permut$second_estimate_raw,
+                    method = "spearman")
+
+# == Combine ==========
+rho_df_within <- bind_rows(
+  data.frame(rho = rho_within_random, condition = "Random"),
+  data.frame(rho = rho_within_numerosity, condition = "Same Numerosity")
+) %>% mutate(facet = "Within Participants")
+
+rho_df_across <- bind_rows(
+  data.frame(rho = rho_across_random, condition = "Random"),
+  data.frame(rho = rho_across_numerosity, condition = "Same Numerosity"),
+  data.frame(rho = rho_across_display, condition = "Same Display")
+) %>% mutate(facet = "Across Participants")
+
+rho_df_faceted <- bind_rows(rho_df_within, rho_df_across) %>%
+  mutate(
+    condition = factor(condition,
+                       levels = c("Random", "Same Numerosity", "Same Display")),
+    facet = factor(facet, levels = c("Within Participants", "Across Participants"))
+  )
+
+rho_df_faceted %>%
+  group_by(facet, condition) %>%
+  summarise(mean_rho = mean(rho), .groups = "drop")
+
+# Exact line in Within Participants facet only
+exact_line_df <- data.frame(
+  rho = rho_exact,
+  facet = factor("Within Participants",
+                 levels = c("Within Participants", "Across Participants"))
+)
+
+# == Plot ==========
+p9 <- ggplot(rho_df_faceted, aes(x = rho, fill = condition)) +
+  geom_histogram(color = "black", alpha = 0.8,
+                 position = "identity", bins = 200) +
+  geom_vline(data = exact_line_df,
+             aes(xintercept = rho),
+             color = "#76B7B2", linewidth = 2) +
+  facet_wrap(~ facet, ncol = 1) +
+  scale_fill_manual(
+    values = c("grey", "#FFD700", "#76B7B2"),
+    breaks = c("Random", "Same Numerosity", "Same Display")
+  ) +
+  scale_x_continuous(breaks = seq(0, 1, 0.2), limits = c(-0.1, 1.0)) +
+  labs(x = "Spearman's correlation, \u03c1",
+       y = "Count") +
   theme_minimal() +
-  theme(axis.text = element_text(size = 35, color = "black"),
-        axis.title = element_text(size = 35, color = "black"),
-        axis.text.x = element_text(angle = 30, hjust = 1, vjust = 1),
-        axis.title.x = element_blank(),
-        legend.position = c(0.25, 0.8),
+  theme(axis.text.x = element_text(size = 25, color = "black"),
+        axis.text.y = element_blank(),
+        axis.title = element_text(size = 30, color = "black"),
+        legend.text = element_text(size = 20, color = "black",
+                                   margin = margin(l = 10)),
         legend.title = element_blank(),
-        legend.text = element_text(size = 35, color = "black"),
+        legend.position = "top",
+        strip.text = element_text(size = 30, color = "black"),
         axis.line = element_line(linewidth = 1, color = "black"))
 p9
 
 # Save plot if needed
-# ggsave("plots/q2_q3.png", plot = p9,
-#        width = 14, height = 8, dpi = 600)
+# ggsave("plots/permutation_cor.png", plot = p9,
+#        width = 14, height = 10, dpi = 600)
+

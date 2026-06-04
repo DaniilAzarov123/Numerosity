@@ -27,6 +27,19 @@ library(emmeans)
 library(glmmTMB)
 library(rstatix)
 
+# ── Match Type labels (reused across plots) ───────────────────────────────────
+
+matchType_labels <- c(
+  "paired" = "Paired",
+  "unpaired" = "Unpaired"
+)
+
+matchType_colors <- c(
+  "paired" = "red",
+  "unpaired" = "blue"
+)
+
+
 # ── Load data ─────────────────────────────────────────────────────────────────
 
 # Log-scale summary
@@ -74,14 +87,16 @@ effectsize::eta_squared(model_regression)
 
 # Plot
 p1 <- ggplot(trials, aes(x = log_numerosity, y = log_response)) +
-  geom_smooth(se = FALSE, method = "glm", linewidth = 2, linetype = "dashed") +
+  geom_smooth(se = FALSE, method = "glm", 
+              linewidth = 2, linetype = "dashed",
+              color = 'black', alpha = 0.7) +
   stat_summary(fun = mean, geom = "point", size = 5) +
   stat_summary(fun.data = mean_cl_normal, geom = "errorbar",
                linewidth = 2, width = 0.02) +
   geom_abline(slope = 1, intercept = 0, linewidth = 2,
-              linetype = "dashed", color = "red") +
+              linetype = "dashed", color = "gray") +
   annotate("text", x = 4.82, y = 4.82, label = "y = x",
-           color = "red", angle = 36, hjust = 0, vjust = -0.5, size = 7) +
+           color = "black", angle = 36, hjust = 0, vjust = -0.5, size = 7) +
   scale_x_continuous(breaks = seq(3.9, 5.1, 0.2)) +
   scale_y_continuous(breaks = seq(3.9, 5.1, 0.2)) +
   labs(x = "Numerosity (log)", y = "Estimate (log)") +
@@ -128,9 +143,8 @@ p2 <- ggplot(gm_raw,
                linewidth = 2, position = position_dodge(0)) +
   scale_x_continuous(breaks = sort(unique(gm_raw$numerosity))) +
   scale_y_continuous(breaks = seq(7.5, 17.5, 2.5)) +
-  scale_color_manual(values = c("red", "blue"),
-                     breaks = c("paired", "unpaired"),
-                     labels = c("Paired", "Unpaired")) +
+  scale_color_manual(values = matchType_colors,
+                     labels = matchType_labels) +
   guides(color = guide_legend(override.aes = list(size = 10))) +
   labs(x = "Numerosity (raw)",
        y = expression("|Estimate"[1] ~ "-" ~ "Estimate"[2] ~ "|")) +
@@ -142,7 +156,6 @@ p2 <- ggplot(gm_raw,
         legend.title = element_blank(),
         legend.position = c(0.85, 0.9),
         axis.line = element_line(linewidth = 1, color = "black"))
-
 p2
 
 # Save plot if needed
@@ -203,9 +216,8 @@ p3 <- ggplot(df_long_log,
                expression(2^nd ~ Estimate),
                "Geometric Mean")
   ) +
-  scale_color_manual(values = c("red", "blue"),
-                     breaks = c("paired", "unpaired"),
-                     labels = c("Paired", "Unpaired")) +
+  scale_color_manual(values = matchType_colors,
+                     labels = matchType_labels) +
   guides(color = guide_legend(override.aes = list(size = 10))) +
   labs(y = "Absolute Error (log)") +
   theme_minimal() +
@@ -247,9 +259,8 @@ p4 <- ggplot(gm_raw, aes(x = numerosity, y = woic_magnitude_raw, color = matchTy
   stat_summary(fun.data = mean_cl_normal, geom = "errorbar",
                linewidth = 2, width = 0.1) +
   stat_summary(fun = mean, geom = "line", linewidth = 1) +
-  scale_color_manual(values = c("red", "blue"),
-                     breaks = c("paired", "unpaired"),
-                     labels = c("Paired", "Unpaired")) +
+  scale_color_manual(values = matchType_colors,
+                     labels = matchType_labels) +
   labs(x = "Numerosity (raw)", y = "WoIC Magnitude (raw)",
        color = "Trial Type") +
   theme_minimal() +
@@ -335,7 +346,7 @@ p5 <- ggplot(df_long_woc,
   stat_summary(fun.data = mean_cl_normal, geom = "errorbar",
                linewidth = 2, width = 0.35,
                position = position_dodge(0.4)) +
-  scale_color_manual(values = c("blue", "red"),
+  scale_color_manual(values = c("#FFD700", "#76B7B2"),
                      breaks = c("diff", "same"),
                      labels = c("Different", "Same"),
                      name = "Display") +
@@ -434,9 +445,8 @@ p6 <- ggplot(df_direction_summary,
   stat_summary(fun.data = mean_cl_normal, geom = "errorbar",
                linewidth = 2, width = 0.35,
                position = position_dodge(0.4)) +
-  scale_color_manual(values = c("red", "blue"),
-                     breaks = c("paired", "unpaired"),
-                     labels = c("Paired", "Unpaired")) +
+  scale_color_manual(values = matchType_colors,
+                     labels = matchType_labels) +
   scale_x_discrete(breaks = c("Correct", "Wrong", "Same"),
                    labels = c("Correct", "Incorrect", "Same")) +
   guides(color = guide_legend(override.aes = list(size = 10))) +
@@ -603,10 +613,10 @@ p7 <- ggplot(rho_df_faceted, aes(x = rho, fill = condition)) +
                  position = "identity", bins = 200) +
   geom_vline(data = exact_line_df,
              aes(xintercept = rho),
-             color = "orange", linewidth = 2) +
+             color = "#76B7B2", linewidth = 2) +
   facet_wrap(~ facet, ncol = 1) +
   scale_fill_manual(
-    values = c("grey", "green", "blue", "orange"),
+    values = c("grey", "#D37295", "#FFD700", "#76B7B2"),
     breaks = c("Random", "Same Object Category",
                "Same Numerosity", "Same Display"),
     labels = c("Random",
@@ -667,16 +677,17 @@ model_fatigue <- lmer(abs_error_log ~ estimate_type * which_half +
 summary(model_fatigue)
 
 # Plot
+paired_color <- matchType_colors[names(matchType_colors)=="paired"]
 p8 <- ggplot(df_fatigue,
              aes(x = estimate_type, y = abs_error_log,
                  group = which_half, alpha = which_half)) +
   stat_summary(fun = mean, geom = "point", size = 8,
-               position = position_dodge(0.4), color = "red") +
+               position = position_dodge(0.4), color = paired_color) +
   stat_summary(fun.data = mean_cl_normal, geom = "errorbar",
                linewidth = 2, width = 0.35,
-               position = position_dodge(0.4), color = "red") +
+               position = position_dodge(0.4), color = paired_color) +
   stat_summary(fun = mean, geom = "line", linewidth = 1,
-               position = position_dodge(0.4), color = "red") +
+               position = position_dodge(0.4), color = paired_color) +
   scale_x_discrete(
     breaks = c("geom_mean_error_log", "first_error_log", "second_error_log"),
     labels = c("Geometric Mean",
